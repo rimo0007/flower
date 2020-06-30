@@ -16,11 +16,9 @@ if 'TF_CONFIG' in os.environ:
     tf.logging.info('TF_CONFIG: {}'.format(os.environ["TF_CONFIG"]))
 
 FLAGS = None
-DATA_DIR = os.getenv('DKUBE_INPUT_DATASETS', None)
-if DATA_DIR is not None:
-    DATA_DIR = DATA_DIR.split(",")[0]
-MODEL_DIR = os.getenv('DKUBE_JOB_OUTPUT_S3', None)
-TFHUB_CACHE_DIR = os.getenv('TFHUB_CACHE_DIR',None)
+DATA_DIR = "/opt/dkube/input"
+MODEL_DIR = "/opt/dkube/output"
+TFHUB_CACHE_DIR = os.getenv('TFHUB_CACHE_DIR', "/opt/dkube/input")
 BATCH_SIZE = int(os.getenv('BATCHSIZE', 10))
 EPOCHS = int(os.getenv('EPOCHS', 1))
 TF_TRAIN_STEPS = int(os.getenv('STEPS',1000))
@@ -32,6 +30,8 @@ steps_epoch  = 0
 #    os.makedirs(MODEL_DIR)
 
 def count_epochs(iterator):
+    if os.getenv('TF_CONFIG', None) == None:
+        return
     cluster_spec = json.loads(os.getenv('TF_CONFIG',None))
     role = cluster_spec['task']
     host = cluster_spec['cluster'][role['type']][role['index']]
@@ -127,6 +127,7 @@ def train(_):
     try:
       fp = open(os.getenv('DKUBE_JOB_HP_TUNING_INFO_FILE', 'None'),'r')
       hyperparams = json.loads(fp.read())
+      hyperparams['num_epochs'] = EPOCHS
     except:
       hyperparams = { "learning_rate":1e-3, "batch_size":BATCH_SIZE, "num_epochs":EPOCHS }
       pass
@@ -195,7 +196,7 @@ def train(_):
         fn = lambda image: _img_string_to_tensor(image, input_img_size)
         features['inputs'] = tf.map_fn(fn, features['inputs'], dtype=tf.float32)
         return tf.estimator.export.ServingInputReceiver(features, received_tensors)
-    if os.getenv('TF_CONFIG') != '':
+    if os.getenv('TF_CONFIG', '') != '':
         config = json.loads(os.getenv('TF_CONFIG'))
         if config['task']['type'] == 'master':
             classifier.export_savedmodel(MODEL_DIR, serving_input_receiver_fn)
